@@ -564,7 +564,7 @@
   //# sourceMappingURL=dpixa.js.map
   
 // =============================================================================
-// WORKER CODE
+// HELPER FUNCTIONS (Pure, no external dependencies)
 // =============================================================================
 
 const corsHeaders = {
@@ -573,6 +573,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Content-Type': 'application/json',
 };
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: corsHeaders });
+}
 
 function validateAccountName(name) {
   if (!name || typeof name !== 'string') {
@@ -596,13 +600,11 @@ function validateAccountName(name) {
   return { valid: true, name: n };
 }
 
-// Updated to accept 'prefix' as an argument
+// UPDATE: Now accepts the prefix as an argument
 function validatePublicKey(key, keyName, prefix) {
   if (!key || typeof key !== 'string') {
     return { valid: false, error: `${keyName} key is required` };
   }
-  
-  // Use the passed prefix (env.PUBLIC_KEY_PREFIX)
   if (!key.startsWith(prefix)) {
     return { valid: false, error: `${keyName} key must start with ${prefix}` };
   }
@@ -612,9 +614,8 @@ function validatePublicKey(key, keyName, prefix) {
   return { valid: true };
 }
 
-// Updated to accept 'env' to access variables
-async function createAccount(env, activeKey, accountName, keys) {
-  // Use env.NODE_URL
+// UPDATE: Now accepts 'env' to read config inside the function
+async function createAccount(env, accountName, keys) {
   const client = new dpixa.Client([env.NODE_URL]);
 
   // Check if account exists
@@ -625,8 +626,8 @@ async function createAccount(env, activeKey, accountName, keys) {
 
   // Operation 1: Create the account
   const createOp = ['account_create', {
-    fee: env.CREATION_FEE,          // From Environment
-    creator: env.CREATOR_ACCOUNT,   // From Environment
+    fee: env.CREATION_FEE,
+    creator: env.CREATOR_ACCOUNT,
     new_account_name: accountName,
     owner: { weight_threshold: 1, account_auths: [], key_auths: [[keys.owner, 1]] },
     active: { weight_threshold: 1, account_auths: [], key_auths: [[keys.active, 1]] },
@@ -635,22 +636,21 @@ async function createAccount(env, activeKey, accountName, keys) {
     json_metadata: JSON.stringify({ created_by: 'pixa-account-creator', created_at: new Date().toISOString() }),
   }];
 
-  // Operation 2: Delegate VESTS (Power) so they have RC
+  // Operation 2: Delegate VESTS
   const delegateOp = ['delegate_vesting_shares', {
-    delegator: env.CREATOR_ACCOUNT, // From Environment
+    delegator: env.CREATOR_ACCOUNT,
     delegatee: accountName,
-    vesting_shares: env.DELEGATION_AMOUNT // From Environment
+    vesting_shares: env.DELEGATION_AMOUNT
   }];
 
-  const privateKey = dpixa.PrivateKey.fromString(activeKey);
+  const privateKey = dpixa.PrivateKey.fromString(env.PIXA_ACTIVE_KEY);
   
-  // Broadcast both operations in a single transaction
   return await client.broadcast.sendOperations([createOp, delegateOp], privateKey);
 }
 
-function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: corsHeaders });
-}
+// =============================================================================
+// MAIN EXPORT
+// =============================================================================
 
 export default {
   async fetch(request, env) {
@@ -668,12 +668,6 @@ export default {
 
     // Create account
     if (url.pathname === '/create-account' && request.method === 'POST') {
-      
-      // Ensure required Environment Variables are present before processing
-      if (!env.NODE_URL || !env.CREATOR_ACCOUNT || !env.CREATION_FEE || !env.DELEGATION_AMOUNT || !env.PUBLIC_KEY_PREFIX) {
-        return jsonResponse({ success: false, error: 'Server configuration error: Missing environment variables' }, 500);
-      }
-
       let body;
       try {
         body = await request.json();
@@ -689,7 +683,8 @@ export default {
         return jsonResponse({ success: false, error: nameCheck.error, field: 'account_name' }, 400);
       }
 
-      // Validate keys (passing the prefix from env)
+      // Validate keys
+      // UPDATE: Pass env.PUBLIC_KEY_PREFIX here
       for (const [key, name] of [[owner_key, 'owner'], [active_key, 'active'], [posting_key, 'posting'], [memo_key, 'memo']]) {
         const check = validatePublicKey(key, name, env.PUBLIC_KEY_PREFIX);
         if (!check.valid) {
@@ -703,7 +698,8 @@ export default {
           return jsonResponse({ success: false, error: 'Server configuration error: Active key not set' }, 503);
         }
 
-        const result = await createAccount(env, env.PIXA_ACTIVE_KEY, nameCheck.name, {
+        // UPDATE: Pass the whole env object to the helper
+        const result = await createAccount(env, nameCheck.name, {
           owner: owner_key,
           active: active_key,
           posting: posting_key,
@@ -730,7 +726,6 @@ export default {
     return jsonResponse({ success: false, error: 'Not found', endpoints: ['POST /create-account', 'GET /health'] }, 404);
   },
 };
-
 /*
 +-----------+-------------------+-----------------------------+
 | Type      | Name              | Value                       |
