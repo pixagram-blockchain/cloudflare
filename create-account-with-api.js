@@ -726,15 +726,4 @@ export default {
     return jsonResponse({ success: false, error: 'Not found', endpoints: ['POST /create-account', 'GET /health'] }, 404);
   },
 };
-/*
-+-----------+-------------------+-----------------------------+
-| Type      | Name              | Value                       |
-+-----------+-------------------+-----------------------------+
-| Plaintext | CREATION_FEE      | 0.000 TESTS                 |
-| Plaintext | CREATOR_ACCOUNT   | initminer                   |
-| Plaintext | DELEGATION_AMOUNT | 100.000000 VESTS            |
-| Plaintext | NODE_URL          | http://rpc.pixagram.io:7778 |
-| Secret    | PIXA_ACTIVE_KEY   | Value encrypted             |
-| Plaintext | PUBLIC_KEY_PREFIX | PIX                         |
-+-----------+-------------------+-----------------------------+
 */
